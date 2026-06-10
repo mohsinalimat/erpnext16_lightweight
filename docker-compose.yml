@@ -1,0 +1,35 @@
+services:
+  erpnext-dev:
+    image: frappe/bench:latest
+    container_name: erpnext_lightweight
+    command: sleep infinity
+    ports:
+      - "8000:8000" # Web UI
+    volumes:
+      # Mount the whole home dir (not just frappe-bench): lets `bench init` create
+      # the frappe-bench subdir itself, and persists it with correct frappe ownership.
+      - erpnext-data:/home/frappe
+    depends_on:
+      - redis
+    # Hard limits to prevent Docker from overwhelming your host system
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1500M
+        reservations:
+          memory: 500M
+
+  # Tiny Redis for Frappe cache / queue / socketio. ERPNext can't install or run
+  # without it. Persistence off — it's only a dev cache/queue.
+  redis:
+    image: redis:7-alpine
+    container_name: erpnext_redis
+    command: redis-server --save "" --appendonly no
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+
+volumes:
+  erpnext-data:
