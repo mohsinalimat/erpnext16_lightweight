@@ -241,13 +241,15 @@ bench --site lab.localhost migrate && bench --site lab.localhost clear-cache
 |---|---|
 | **v15 + SQLite fails** | SQLite is v16-only. Always use `--frappe-branch version-16`. |
 | **`Bench instance already exists` / wrong version** | The volume holds a stale bench. Reset: `docker compose down`, `docker volume rm erpnext16_lightweight_erpnext-data`, `docker compose up -d`, then re-init. |
+| **Scripts say "container is not running" / data looks empty after renaming the folder** | Compose keys resources to the project name (the folder name). This project pins it via [`.env`](.env) (`COMPOSE_PROJECT_NAME=erpnext16_lightweight`) so renaming/moving the folder still finds the existing containers and the `erpnext16_lightweight_erpnext-data` volume. Don't delete `.env`. |
 | **Redis `Connection refused` (e.g. `127.0.0.1:11000`)** | The bench isn't pointed at the sidecar. Re-run the three `bench set-config -g redis_*` lines (host is `redis`). Confirm `docker compose ps` shows `erpnext_redis` Up. |
 | **OOM while building assets (at 1500 MB)** | Temporarily raise `deploy.resources.limits.memory` in [docker-compose.yml](docker-compose.yml), recreate, build, then lower it back. |
 | **`Permission denied` on first `bench init`** | `docker exec -u root erpnext_lightweight chown -R frappe:frappe /home/frappe/frappe-bench` |
 | **Web server "not responding" after start** | Remember step 2 — the web server doesn't auto-start. Use a daily script, or run the `docker exec -d ... bench serve` line. |
 
-> The volume name is `<project-folder>_erpnext-data`. Confirm yours with `docker volume ls` before
-> running any `volume rm`.
+> The volume name is `<project-name>_erpnext-data`. The project name is pinned to
+> `erpnext16_lightweight` in [`.env`](.env), so the data volume is
+> `erpnext16_lightweight_erpnext-data`. Confirm with `docker volume ls` before any `volume rm`.
 
 ---
 
