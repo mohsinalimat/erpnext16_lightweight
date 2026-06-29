@@ -13,8 +13,8 @@ Docker. Written for both DevOps and developers — if you can copy-paste, you ca
 | Thing | Requirement |
 |---|---|
 | **Docker Desktop** | Installed and **running** (the only thing you must install) |
-| **RAM** | ~2 GB free is plenty — the stack is capped at 1500 MB |
-| **CPU** | 1 core is enough (the container is capped at 1.0 CPU) |
+| **RAM** | ~3 GB free is plenty — the stack is capped at 2500 MB (plus a ~200 MB Redis sidecar) |
+| **CPU** | 2 cores recommended (the container is capped at 2.0 CPU) |
 | **Disk** | ~3–4 GB for the image + bench + site |
 | **OS** | Windows, macOS, or Linux (anywhere Docker runs) |
 | **Internet** | Needed for first-time setup (downloads Frappe + ERPNext) |
@@ -211,7 +211,7 @@ bench --site lab.localhost migrate && bench --site lab.localhost clear-cache
 | **`Bench instance already exists` / wrong version** | The volume holds a stale bench. Reset: `docker compose down`, `docker volume rm erpnext16_lightweight_erpnext-data`, `docker compose up -d`, then re-init. |
 | **Scripts say "container is not running" / data looks empty after renaming the folder** | Compose keys resources to the project name (the folder name). This project pins it via [`.env`](.env) (`COMPOSE_PROJECT_NAME=erpnext16_lightweight`) so renaming/moving the folder still finds the existing containers and the `erpnext16_lightweight_erpnext-data` volume. Don't delete `.env`. |
 | **Redis `Connection refused` (e.g. `127.0.0.1:11000`)** | The bench isn't pointed at the sidecar. Re-run the three `bench set-config -g redis_*` lines (host is `redis`). Confirm `docker compose ps` shows `erpnext_redis` Up. |
-| **OOM while building assets (at 1500 MB)** | Temporarily raise `deploy.resources.limits.memory` in [docker-compose.yml](docker-compose.yml), recreate, build, then lower it back. |
+| **OOM while building assets** | The memory limit already defaults to **2500 MB** to survive the first-time `bench build`. If you still OOM, raise `deploy.resources.limits.memory` in [docker-compose.yml](docker-compose.yml) further, recreate, and build. You can lower it back to 1500 MB after the first install if you want. |
 | **`Permission denied` on first `bench init`** | `docker exec -u root erpnext_lightweight chown -R frappe:frappe /home/frappe/frappe-bench` |
 | **Web server "not responding" after start** | Remember step 2 — the web server doesn't auto-start. Use a daily script, or run the `docker exec -d ... bench serve` line. |
 

@@ -2,7 +2,8 @@
 
 A minimal, resource-friendly **ERPNext v16** you can run locally for learning, practice, and
 development — backed by **SQLite (no MariaDB)** plus one tiny `redis:alpine` sidecar, all wrapped
-in Docker Compose and capped at **1 CPU / 1500 MB RAM** so it never overwhelms your machine.
+in Docker Compose and capped at **2 CPUs / 2.5 GB RAM** (plus a tiny ~200 MB Redis sidecar)
+so it never overwhelms your machine.
 
 > SQLite support requires **Frappe/ERPNext v16** — it is not available on v15.
 
@@ -10,8 +11,9 @@ in Docker Compose and capped at **1 CPU / 1500 MB RAM** so it never overwhelms y
 
 ## What this is
 
-- **One container** running ERPNext (`frappe/bench:latest`), command `sleep infinity`, with the
-  web UI on port **8000**.
+- **One container** running ERPNext (`frappe/bench:latest`) via a self-detecting entrypoint
+  ([`scripts/entrypoint.sh`](scripts/entrypoint.sh)) that installs everything on the first run
+  and then keeps `bench start` alive — web UI on port **8000**, socketio on **9000**.
 - **SQLite** as the database — a plain file inside the site, so there is **no separate database
   server** to install, tune, or babysit.
 - **One small Redis** sidecar (`redis:7-alpine`) for Frappe's cache / queue / socketio. Redis is
