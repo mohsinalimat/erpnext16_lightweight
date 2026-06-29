@@ -41,18 +41,35 @@ in Docker Compose and capped at **1 CPU / 1500 MB RAM** so it never overwhelms y
 - Run `docker` commands from the folder containing [docker-compose.yml](docker-compose.yml)
   (the helper scripts handle this for you).
 
-## First-time setup
+## Get started — one command
 
-The initial install (init bench → get ERPNext → create the site) is a one-time process. Follow the
-step-by-step guide in **[CHEATSHEET.md](CHEATSHEET.md)**. You only do this once.
+```bash
+docker compose up -d
+```
+
+That's it. The container's entrypoint ([`scripts/entrypoint.sh`](scripts/entrypoint.sh))
+self-detects state:
+
+- **First run** (empty volume): runs `bench init`, pulls ERPNext, points it at the redis sidecar,
+  creates the `test.localhost` site on SQLite, installs ERPNext, then starts all services.
+  Takes ~5–15 minutes; watch progress with `docker compose logs -f erpnext-dev`.
+- **Subsequent runs**: skips install, just runs `bench start` (web + socketio + worker +
+  scheduler + asset watcher).
+
+Open **http://test.localhost:8000** → log in as `Administrator` / `erpadmindb`.
+
+To restart after a config change: `docker compose restart`. To stop: `docker compose stop`.
+To wipe and start over: `docker compose down -v` (⚠️ deletes your data volume).
+
+> Override the site name, admin password, or branches with env vars or a `.env` next to
+> `docker-compose.yml`: `SITE_NAME`, `ADMIN_PASSWORD`, `FRAPPE_BRANCH`, `ERPNEXT_BRANCH`.
 
 ---
 
-## Daily use — helper scripts
+## Helper scripts (optional convenience)
 
-After the one-time setup, use the ready-made scripts to bring the app up and down. Each script
-**starts the container *and* the web server** (`bench serve`), because the web server does **not**
-auto-start with the container.
+Thin wrappers around `docker compose up -d` / `restart` / `stop` for users who prefer a
+double-clickable file. **Not required** — `docker compose up -d` does the same thing.
 
 | OS / Shell | Scripts | Notes |
 |---|---|---|

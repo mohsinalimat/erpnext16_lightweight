@@ -2,21 +2,43 @@ services:
   erpnext-dev:
     image: frappe/bench:latest
     container_name: erpnext_lightweight
-    command: sleep infinity
+    # Self-detecting entrypoint: first run installs bench + ERPNext + creates the site;
+    # every subsequent run just exec's `bench start`. The `tr -d '\r'` step is a safety
+    # net for Windows hosts that may save the script with CRLF line endings.
+    command:
+      - bash
+      - -c
+      - |
+        tr -d '\r' < /opt/erpnext-entrypoint.sh > /tmp/entrypoint.sh && \
+        chmod +x /tmp/entrypoint.sh && \
+        exec /tmp/entrypoint.sh
     ports:
       - "8000:8000" # Web UI
+      - "9000:9000" # Socket.IO (avoids "reconnecting" toasts in the desk)
     volumes:
       # Mount the whole home dir (not just frappe-bench): lets `bench init` create
       # the frappe-bench subdir itself, and persists it with correct frappe ownership.
       - erpnext-data:/home/frappe
+      # Self-detecting bootstrap script (read-only, edited on the host).
+      - ./scripts/entrypoint.sh:/opt/erpnext-entrypoint.sh:ro
+    environment:
+      # Overridable via shell env or a `.env` next to this file. Defaults match the
+      # cheat-sheet so the URL / credentials stay the same as before.
+      SITE_NAME: ${SITE_NAME:-test.localhost}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-erpadmindb}
+      FRAPPE_BRANCH: ${FRAPPE_BRANCH:-version-16}
+      ERPNEXT_BRANCH: ${ERPNEXT_BRANCH:-version-16}
+      REDIS_HOST: redis
     depends_on:
       - redis
-    # Hard limits to prevent Docker from overwhelming your host system
+    # Hard limits to prevent Docker from overwhelming your host system.
+    # Bumped from 1500M because the first-time asset build (`bench build`) can OOM
+    # at 1500M. After the first install you can lower this back to 1500M if you want.
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 1500M
+          cpus: '2.0'
+          memory: 2500M
         reservations:
           memory: 500M
 

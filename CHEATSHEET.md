@@ -28,10 +28,13 @@ You do **not** need Python, Node, MariaDB, or Redis installed on your machine �
 
 Three layers, from outside in:
 
-1. **The container** = the box. Managed by `docker compose`. It just runs `sleep infinity` and
-   does nothing on its own.
-2. **The web server** (`bench serve`) = the app running *inside* the box. **It does not start
-   automatically with the container** — this is the #1 thing people forget.
+1. **The container** = the box. Managed by `docker compose`. Its entrypoint
+   ([`scripts/entrypoint.sh`](scripts/entrypoint.sh)) self-detects whether the volume is empty
+   (first install) or already set up (just restart), then runs `bench start` to keep all services
+   alive.
+2. **The bench services** (web on 8000, socketio on 9000, worker, scheduler, asset watcher) =
+   the app running *inside* the box. Started automatically by the entrypoint — you do **not**
+   need a second command.
 3. **Your data** = lives in a Docker **named volume** (`erpnext-data`). It survives restarts and
    even deleting the container. It is destroyed only if you explicitly wipe the volume.
 
@@ -45,64 +48,34 @@ Two more terms you'll see everywhere:
 
 ---
 
-## 3. Daily use — just use the scripts 🎯
+## 3. Daily use — one command 🎯
 
-**You do not need to memorize any Docker commands for everyday start/stop.** Ready-made scripts do
-the two steps (start the box **and** the app) for you, so nobody has to remember the commands:
+From the folder containing [docker-compose.yml](docker-compose.yml):
 
-| OS | Command (from the scripts folder, or double-click the file) |
-|---|---|
-| Windows (CMD) | `start.bat` / `restart.bat` / `stop.bat` |
-| Windows (PowerShell) | `.\start.ps1` / `.\restart.ps1` / `.\stop.ps1` |
-| macOS / Linux | `./start.sh` / `./restart.sh` / `./stop.sh` |
+```bash
+docker compose up -d              # first install OR restart — same command
+docker compose restart            # restart after a config change
+docker compose stop               # stop everything (data kept)
+docker compose logs -f erpnext-dev   # follow first-install progress or runtime logs
+```
 
 Then open **http://test.localhost:8000** → log in as `Administrator` / `erpadmindb`.
 
-> 💡 On Windows the `.bat` files need no setup. The `.ps1` files may need a one-time execution
-> policy change — see the [README](README.md#fixing-running-scripts-is-disabled-on-this-system)
-> and [scripts/README.md](scripts/README.md).
-
-The sections below show the **manual** commands the scripts run — handy for DevOps, debugging, or
-just understanding what's happening under the hood.
+There are also optional double-clickable wrappers in `scripts/{windows,mac}/` that just call
+`docker compose` under the hood — use whichever you prefer.
 
 ---
 
-## 4. Docker commands explained (the manual way)
-
-Run all of these from the folder that contains [docker-compose.yml](docker-compose.yml).
-
-### Start
+## 4. Watch the server live (foreground)
 ```bash
-docker compose start                 # 1) start the box (container)
-docker exec -d erpnext_lightweight bash -lc "cd /home/frappe/frappe-bench && exec bench serve --port 8000 >> logs/serve.log 2>&1"
-                                     # 2) start the app (web server), detached
-```
-*Why two commands:* the web server isn't auto-started with the container. `-d` = detached, so it
-keeps running after you close the terminal.
-
-### Restart (e.g. after a config change)
-```bash
-docker compose restart
-docker exec -d erpnext_lightweight bash -lc "cd /home/frappe/frappe-bench && exec bench serve --port 8000 >> logs/serve.log 2>&1"
-```
-*Why line 2 again:* `restart` kills `bench serve` along with the container's processes, so you
-relaunch it.
-
-### Stop
-```bash
-docker compose stop                  # stops the box and everything inside it; data is safe
-```
-
-### Watch the server live (foreground) instead of detached
-```bash
-docker exec -it erpnext_lightweight bash
-cd /home/frappe/frappe-bench && bench serve --port 8000      # Ctrl+C to quit
+docker compose up                 # same as `up -d` but stays attached, Ctrl+C to stop
 ```
 
 ### Check it's healthy
 ```bash
 docker compose ps                                            # both erpnext_lightweight + erpnext_redis "Up"?
-docker exec erpnext_lightweight tail -n 20 /home/frappe/frappe-bench/logs/serve.log
+docker compose logs -f erpnext-dev                           # follow the entrypoint + bench start output
+docker exec erpnext_lightweight tail -n 20 /home/frappe/frappe-bench/logs/web.log
 ```
 
 ### Other useful container commands
@@ -122,44 +95,39 @@ docker exec erpnext_lightweight tail -n 20 /home/frappe/frappe-bench/logs/serve.
 
 ---
 
-## 5. First-time setup (run once)
+## 5. First-time setup — automatic
 
-You only do this the very first time, or after a full reset.
+You don't run any of this by hand anymore. `docker compose up -d` triggers the entrypoint
+([`scripts/entrypoint.sh`](scripts/entrypoint.sh)), which on an empty volume runs the full
+install: `bench init` → `bench get-app erpnext` → redis config → `bench new-site` (SQLite) →
+`install-app erpnext` → `developer_mode 1` → `bench start`.
 
-```bash
-# --- On your machine (host) ---
-docker compose up -d                          # 1. start the container
-docker exec -it erpnext_lightweight bash      # 2. open a shell inside it (you're now "frappe")
+Watch progress with `docker compose logs -f erpnext-dev` (takes 5–15 minutes on the first run).
+When it prints the "Bench ready" line, open **http://test.localhost:8000** and log in as
+`Administrator` / `erpadmindb`.
 
-# --- Inside the container ---
-cd /home/frappe
-# 3. create the bench (v16) and pull ERPNext
-bench init --skip-redis-config-generation --frappe-branch version-16 frappe-bench
-cd frappe-bench
-bench get-app --branch version-16 erpnext
+> ✅ Verify the version after install:
+> `docker exec erpnext_lightweight /home/frappe/frappe-bench/env/bin/python -c "import frappe; print(frappe.__version__)"`
+> must print `16.x`. (SQLite only works on v16.)
 
-# 4. point the bench at the Redis sidecar (hostname is "redis", NOT 127.0.0.1)
-bench set-config -g redis_cache    redis://redis:6379/0
-bench set-config -g redis_queue    redis://redis:6379/1
-bench set-config -g redis_socketio redis://redis:6379/2
+### Overriding defaults
 
-# 5. create the site on SQLite and install ERPNext
-bench new-site test.localhost --db-type sqlite --admin-password erpadmindb --install-app erpnext
+Set these env vars (in your shell, or a `.env` next to `docker-compose.yml`) **before** the first
+`up`:
 
-# 6. turn on developer mode and serve
-bench --site test.localhost set-config developer_mode 1
-bench --site test.localhost clear-cache
-bench use test.localhost
-bench serve --port 8000
-```
+| Variable | Default | Notes |
+|---|---|---|
+| `SITE_NAME` | `test.localhost` | Browser URL becomes `http://<SITE_NAME>:8000` |
+| `ADMIN_PASSWORD` | `erpadmindb` | Administrator password for the site |
+| `FRAPPE_BRANCH` | `version-16` | Don't change unless you know SQLite needs v16 |
+| `ERPNEXT_BRANCH` | `version-16` | Match Frappe branch |
 
-Open **http://test.localhost:8000** → log in as `Administrator` / `erpadmindb`.
+### If install fails partway
 
-> ✅ Verify the version right after init:
-> `./env/bin/python -c "import frappe; print(frappe.__version__)"` must print `16.x`.
-> (SQLite only works on v16.)
-
-After this, switch to the **daily-use scripts** (section 3) — don't repeat these steps.
+The entrypoint is idempotent. Fix the cause, then `docker compose up -d` again — it picks up where
+it stopped. Common cause: OOM. Bump `deploy.resources.limits.memory` in `docker-compose.yml` and
+retry. If the install got far enough to create a broken bench dir, wipe and retry:
+`docker compose down -v && docker compose up -d` (deletes the data volume).
 
 ---
 
